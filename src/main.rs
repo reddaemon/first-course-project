@@ -24,15 +24,10 @@ fn main() {
     let format_str = &args[2];
     let file_path = &args[3];
 
-    let format = match format_str.to_lowercase().as_str() {
-        "text" => Formats::Text,
-        "csv" => Formats::Csv,
-        "binary" => Formats::Bin,
-        _ => {
-            eprintln!("unsupported format '{}'", format_str);
-            process::exit(1);
-        }
-    };
+    let format: Formats = format_str.parse().unwrap_or_else(|e| {
+        eprintln!("Ошибка: {}", e);
+        process::exit(1);
+    });
 
     match action.as_str() {
         "read" => {
@@ -89,33 +84,70 @@ fn main() {
             }
         }
         "convert" => {
-            if args.len() < 4 {
-                print_usage();
-                process::exit(1)
+            let local_args: Vec<String> = std::env::args().skip(1).collect();
+
+            let is_valid_stream_mode =
+                local_args.len() == 3 && local_args[2].parse::<Formats>().is_ok();
+            let is_valid_file_mode = local_args.len() == 5;
+
+            if !is_valid_stream_mode && !is_valid_file_mode {
+                eprintln!("Ошибка: Неверный синтаксис команды convert.");
+                eprintln!(
+                    "Использование:\n  Потоковая: cargo run -- convert <из> <в>\n  Файловая:  cargo run -- convert <из> <вход_файл> <в> <выход_файл>"
+                );
+                process::exit(1);
             }
 
-            let from_format: Formats = args[2].parse().unwrap_or_else(|e| {
+            let (from_format_str, to_format_str) = if local_args.len() == 3 {
+                (local_args[1].as_str(), local_args[2].as_str())
+            } else {
+                (local_args[1].as_str(), local_args[3].as_str())
+            };
+
+            let from_format: Formats = from_format_str.parse().unwrap_or_else(|e| {
                 eprintln!("{}", e);
                 std::process::exit(1);
             });
 
-            let input_file = File::open(&args[3]).unwrap_or_else(|e| {
-                eprintln!("Ошибка открытия входного файла: {}: {} ", e, args[3]);
-                process::exit(1);
-            });
-
-            let to_format: Formats = args[4].parse().unwrap_or_else(|e| {
+            let to_format: Formats = to_format_str.parse().unwrap_or_else(|e| {
                 eprintln!("{}", e);
                 std::process::exit(1);
             });
 
-            let output_file = File::create(&args[5]).unwrap_or_else(|e| {
-                eprintln!("Ошибка создания выходного файла: {}", e);
-                process::exit(1);
-            });
+            let result = if local_args.len() == 5 {
+                let input_path = &local_args[2];
+                let output_path = &local_args[4];
 
-            match Formats::convert(&from_format, &to_format, input_file, output_file) {
-                Ok(count) => println!("Конвертация успешна! Перенесено записей: {}", count),
+                let input_file = File::open(input_path).unwrap_or_else(|e| {
+                    eprintln!("Ошибка открытия входного файла: {}: {} ", e, input_path);
+                    process::exit(1);
+                });
+
+                let output_file = File::create(output_path).unwrap_or_else(|e| {
+                    eprintln!("Ошибка создания выходного файла: {}", e);
+                    process::exit(1);
+                });
+
+                Formats::convert(&from_format, &to_format, input_file, output_file)
+            } else {
+                eprintln!(
+                    "Вставьте данные в выбранном формате и нажмите Ctrl+D (или Ctrl+Z в Windows) для конвертации:"
+                );
+
+                Formats::convert(
+                    &from_format,
+                    &to_format,
+                    std::io::stdin(),
+                    std::io::stdout(),
+                )
+            };
+
+            match result {
+                Ok(count) => {
+                    if local_args.len() == 5 {
+                        println!("Конвертация успешна! Перенесено записей: {}", count);
+                    }
+                }
                 Err(e) => {
                     eprintln!("Критическая ошибка библиотеки при конвертации: {}", e);
                     process::exit(1);

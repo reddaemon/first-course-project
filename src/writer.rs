@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::model::{self, Operation};
+use crate::model::{self, Operation, OperationType};
 
 impl model::Formats {
     /// Записывает коллекцию транзакций в абстрактный приёмник.
@@ -43,10 +43,14 @@ impl model::Formats {
                     self.write_u32(&mut writer, category_len)?;
                     self.write_string(&mut writer, &item.category)?;
 
-                    let operation_type_bytes = item.operation_type.as_bytes();
-                    let operation_type_len = operation_type_bytes.len() as u32;
+                    let op_str = match item.operation_type {
+                        OperationType::Income => "income",
+                        OperationType::Expense => "expense",
+                    };
+
+                    let operation_type_len = op_str.len() as u32;
                     self.write_u32(&mut writer, operation_type_len)?;
-                    self.write_string(&mut writer, &item.operation_type)?;
+                    self.write_string(&mut writer, op_str)?;
 
                     self.write_u32(&mut writer, item.summ)?;
                 }

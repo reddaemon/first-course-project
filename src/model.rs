@@ -4,8 +4,15 @@
 pub struct Operation {
     pub date: String,
     pub category: String,
-    pub operation_type: String,
+    pub operation_type: OperationType,
     pub summ: u32,
+}
+
+/// Тип финансовой операции.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationType {
+    Income,
+    Expense,
 }
 
 /// Поддерживаемые форматы файлов для импорта, экспорта и конвертации данных.

@@ -2,11 +2,12 @@ use std::io::{self, Read};
 
 use crate::{
     InternalErrors,
-    model::{self, Operation},
+    model::{self, Operation, OperationType},
 };
 
 impl model::Formats {
     /// парсер бинарного формата
+    /// Возвращает ошибку при неверной сигнатуре 'BINF' или внезапном обрыве файла.
     pub fn parse_binary<R: Read>(&self, mut reader: R) -> Result<Vec<Operation>, InternalErrors> {
         let mut header_bytes = [0u8; 4];
 
@@ -23,44 +24,66 @@ impl model::Formats {
             })? as usize;
 
             let mut results = Vec::with_capacity(total_records);
-            for _ in 0..total_records {
+            for index in 0..total_records {
                 let date_len = self.read_u32(reader.by_ref()).map_err(|e| {
                     InternalErrors::InvalidInput(format!("Ошибка чтения длины даты: {}", e))
                 })? as usize;
 
-                let date = self.read_string(&mut reader, date_len).map_err(|e| {
-                    eprintln!("Файл оборвался при чтении NAME длиной {}", date_len);
-                    InternalErrors::IoFailed(e)
+                let date = self.read_string(reader.by_ref(), date_len).map_err(|_| {
+                    InternalErrors::InvalidInput(format!(
+                        "Бинарный файл оборвался на записи #{}: повреждено поле 'дата'",
+                        index
+                    ))
                 })?;
 
                 let category_len = match self.read_u32(&mut reader) {
                     Ok(len) => len as usize,
-                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        return Err(InternalErrors::InvalidInput(format!(
+                            "Бинарный файл оборвался на записи #{}: ожидалось поле 'длина категории'",
+                            index
+                        )));
+                    }
                     Err(e) => return Err(InternalErrors::IoFailed(e)),
                 };
-                let category = self.read_string(&mut reader, category_len).map_err(|e| {
-                    eprintln!("Файл оборвался при чтении CATEGORY длиной {}", category_len);
-                    InternalErrors::IoFailed(e)
-                })?;
+                let category = self
+                    .read_string(reader.by_ref(), category_len)
+                    .map_err(|_| {
+                        InternalErrors::InvalidInput(format!(
+                            "Бинарный файл оборвался на записи #{}: повреждено поле 'категория'",
+                            index
+                        ))
+                    })?;
 
                 let operation_type_len = match self.read_u32(&mut reader) {
                     Ok(len) => len as usize,
-                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        return Err(InternalErrors::InvalidInput(format!(
+                            "Бинарный файл оборвался на записи #{}: ожидалось поле 'длина типа операции'",
+                            index
+                        )));
+                    }
                     Err(e) => return Err(InternalErrors::IoFailed(e)),
                 };
-                let operation_type =
-                    self.read_string(&mut reader, operation_type_len)
-                        .map_err(|e| {
-                            eprintln!(
-                                "Файл оборвался при чтении OPERATION_TYPE длиной {}",
-                                operation_type_len
-                            );
-                            InternalErrors::IoFailed(e)
-                        })?;
-                let summ = self.read_u32(&mut reader).map_err(|e| {
-                    eprintln!("Файл оборвался при чтении SUMM для объекта '{}'", date);
-                    InternalErrors::IoFailed(e)
-                })?;
+                let operation_type_raw = self
+                    .read_string(reader.by_ref(), operation_type_len)
+                    .map_err(|_| {
+                        InternalErrors::InvalidInput(format!(
+                            "Бинарный файл оборвался на записи #{}: повреждено поле 'тип операции'",
+                            index
+                        ))
+                    })?;
+
+                let operation_type: OperationType = operation_type_raw.parse()?;
+                let summ = match self.read_u32(reader.by_ref()) {
+                    Ok(val) => val,
+                    Err(_) => {
+                        return Err(InternalErrors::InvalidInput(format!(
+                            "Бинарный файл оборвался на записи #{}: ожидалось поле 'сумма'",
+                            index
+                        )));
+                    }
+                };
                 results.push(Operation {
                     date,
                     category,

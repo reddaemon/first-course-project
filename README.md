@@ -128,6 +128,22 @@ cargo run -- convert binary output.bin text report.txt
 cargo run -- convert text report.txt csv final_table.csv
 ```
 
+#### Важная заметка для пользователей Windows (PowerShell vs MSYS2)
+
+При работе с сырым бинарным форматом (`bin`/`binary`) стандартный терминал Windows **PowerShell** принудительно перекодирует поток `stdout` в текстовый формат (UTF-16), что **безвозвратно повреждает структуру бинарного файла** `BINF` (парсер выдаст ошибку `UnexpectedEof` или `failed to fill whole buffer`).
+
+Для корректной потоковой конвертации и перенаправления байт в Windows используйте один из двух подходов:
+
+1. **POSIX-окружение (Рекомендуется):** Запускайте команды внутри **MSYS2**, **Git Bash** или **WSL**. Там потоки работают в честном бинарном режиме, а ввод завершается стандартной Unix-комбинацией **`Ctrl+D`**:
+   ```bash
+   cargo run -- convert csv bin > data/result.bin
+   ```
+
+2. **Явные файлы в аргументах:** Если вы используете обычный PowerShell, избегайте перенаправления `>` и передавайте пути к файлам напрямую в аргументы утилиты — в этом режиме байты пишутся на диск в обход кодировок терминала:
+   ```powershell
+   cargo run -- convert csv data/sample.csv bin data/result.bin
+   ```
+
 ---
 ### 4. Сравнение данных (`comparer`)
 
