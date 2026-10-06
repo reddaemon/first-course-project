@@ -1,0 +1,16 @@
+[package]
+name = "first-course-project"
+version = "0.1.0"
+edition = "2024"
+default-run = "converter"
+
+[[bin]]
+name = "converter"
+path = "src/main.rs"
+
+# Указываем, какой бинарник запускать по умолчанию при выполнении `cargo run`
+[package.metadata.cargo]
+# Либо используем стандартный ключ Cargo:
+default-run = "converter"
+
+[dependencies]
